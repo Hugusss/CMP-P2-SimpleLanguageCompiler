@@ -1,0 +1,23 @@
+// Test de Operadores Especiales
+int base
+base := 10
+int exponente
+exponente := 2
+
+// 1. Módulo (Solo enteros)
+int resto
+resto := base % 3 
+// 10 % 3 = 1
+
+// 2. Unario Negativo
+int negativo
+negativo := -base 
+// -10
+
+// 3. Potencia (se acepta pero no procesa por lo especificado en el enunciado)
+int pot
+pot := base ** exponente
+
+resto
+negativo
+pot

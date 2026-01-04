@@ -1,0 +1,30 @@
+// Test de Aritmética y Tipos
+int a
+a := 10
+float b
+b := 5.5
+
+// 1. Precedencia: Multiplicación antes que suma
+// 10 + 5.5 * 2 -> 10 + 11.0 -> 21.0
+float res1
+res1 := a + b * 2
+
+// 2. Paréntesis
+// (10 + 5.5) * 2 -> 15.5 * 2 -> 31.0
+float res2
+res2 := (a + b) * 2
+
+// 3. Promoción de Tipos (Int -> Float)
+// 'a' es int, 'res3' es float. Debe generar I2F
+float res3
+res3 := a
+
+// 4. Expresión compleja
+// 10 - 2 * 3 + 1 -> 10 - 6 + 1 -> 5
+int res4
+res4 := a - 2 * 3 + 1
+
+res1
+res2
+res3
+res4
