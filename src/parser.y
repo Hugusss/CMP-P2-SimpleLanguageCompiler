@@ -10,7 +10,6 @@ extern int yylex();
 extern int yylineno;
 extern char *yytext;
 extern FILE *yyin;
-
 void yyerror(const char *s);
 
 /* --- GESTIÓN DE LA TABLA DE SÍMBOLOS --- */
@@ -30,7 +29,7 @@ C3AType get_var_type(char *name) {
     return T_ERROR;
 }
 
-/* --- HELPER PARA OPERACIONES ARITMÉTICAS --- */
+/* --- HELPER PARA OPERACIONES BINARIAS --- */
 C3A_Info gen_binary_op(char *op_base, C3A_Info a, C3A_Info b) {
     C3A_Info res;
     res.type = T_ERROR;
@@ -39,7 +38,19 @@ C3A_Info gen_binary_op(char *op_base, C3A_Info a, C3A_Info b) {
     /* 1. Comprobar tipos */
     if (a.type == T_ERROR || b.type == T_ERROR) return res;
 
-    /* 2. Actualización de tipos (Casteo I2F si es necesario) */
+    /* MODULO: solo enteros */
+    if (strcmp(op_base, "MOD") == 0) {
+        if (a.type == T_FLOAT || b.type == T_FLOAT) {
+            fprintf(stderr, "Error semántico: Módulo solo acepta enteros.\n");
+            return res;
+        }
+        res.type = T_INT;
+        res.addr = cg_new_temp();
+        cg_emit("MODI", a.addr, b.addr, res.addr);
+        return res;
+    }
+
+    /* RESTO: actualización automática a Float si es necesario */
     char *addr_a = a.addr;
     char *addr_b = b.addr;
     C3AType final_type = T_INT;
@@ -68,7 +79,22 @@ C3A_Info gen_binary_op(char *op_base, C3A_Info a, C3A_Info b) {
     
     /* type_to_opcode convierte "ADD" en "ADDI" o "ADDF" */
     cg_emit(type_to_opcode(op_base, final_type), addr_a, addr_b, res.addr);
+    return res;
+}
+
+/* --- HELPER PARA UNARIOS --- */
+C3A_Info gen_unary_op(char *op_type, C3A_Info a) {
+    C3A_Info res;
+    res.type = T_ERROR;
+    res.addr = NULL;
+    if (a.type == T_ERROR) return res;
+
+    res.type = a.type;
+    res.addr = cg_new_temp();
     
+    /* CHSI o CHSF */
+    char *opcode = (a.type == T_INT) ? "CHSI" : "CHSF";
+    cg_emit(opcode, a.addr, NULL, res.addr);
     return res;
 }
 %}
@@ -78,7 +104,6 @@ C3A_Info gen_binary_op(char *op_base, C3A_Info a, C3A_Info b) {
         char *lexema;
         int line;
     } ident;
-    
     char *literal; 
     C3A_Info info;
 }
@@ -92,7 +117,7 @@ C3A_Info gen_binary_op(char *op_base, C3A_Info a, C3A_Info b) {
 %token <literal> LIT_INT LIT_FLOAT LIT_BOOL LIT_STRING
 %token <ident> ID 
 
-%type <info> expressio term factor repeat_header
+%type <info> expressio term potencia factor repeat_header
 %type <ident> variable
 
 %start programa
@@ -122,7 +147,6 @@ sentencia : declaracion EOL
           | error EOL { yyerrok; }
           ;
 
-/* Declaraciones: Solo guardar el tipo en la tabla, no genera código (salvo inicialización) */
 declaracion : KW_INT variable   { install_var($2.lexema, T_INT); }
             | KW_FLOAT variable { install_var($2.lexema, T_FLOAT); }
             | KW_INT variable ASSIGN expressio {
@@ -181,27 +205,42 @@ repeat_header : REPEAT expressio DO {
     $$.label_idx = cg_next_quad();
     $$.ctr_var = ctr;        /* guardar nombre contador */
     $$.addr = $2.addr;       /* guardar nombre límite */
-    /* $$.type no es relevante aquí */
 }
 
-/* --- EXPRESIONES ARITMÉTICAS --- */
+/* --- PRECEDENCIA --- */
+
+/* Nivel 1: Suma, Resta y Unarios */
 expressio : term
           | expressio PLUS term  { $$ = gen_binary_op("ADD", $1, $3); }
           | expressio MINUS term { $$ = gen_binary_op("SUB", $1, $3); }
+          | MINUS term           { $$ = gen_unary_op("MINUS", $2); } /* Unario */
+          | PLUS term            { $$ = $2; }
           ;
 
-term : factor
-     | term MULT factor { $$ = gen_binary_op("MUL", $1, $3); }
-     | term DIV factor  { $$ = gen_binary_op("DIV", $1, $3); }
+/* Nivel 2: Multipli, Div y Mod */
+term : potencia
+     | term MULT potencia { $$ = gen_binary_op("MUL", $1, $3); }
+     | term DIV potencia  { $$ = gen_binary_op("DIV", $1, $3); }
+     | term MOD potencia  { $$ = gen_binary_op("MOD", $1, $3); }
      ;
 
+/* Nivel 3: Potencia */
+potencia : factor
+         | factor POW potencia { 
+             /* PENDENT: Implementar bucle de potència */
+             fprintf(stderr, "Warning: Power operator not implemented yet (requires loop)\n");
+             $$ = $1; /* Dummy per ara */
+         }
+         ;
+
+/* Nivel 4: átomos */
 factor : LIT_INT { 
-            $$.addr = strdup($1); 
+            $$.addr = strdup($1);
             $$.type = T_INT; 
          }
        | LIT_FLOAT { 
             $$.addr = strdup($1); 
-            $$.type = T_FLOAT; 
+            $$.type = T_FLOAT;
          }
        | variable {
             $$.addr = strdup($1.lexema);

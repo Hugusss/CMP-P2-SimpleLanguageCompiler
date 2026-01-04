@@ -1,0 +1,6 @@
+int a
+a := 10
+int b
+b := -a     // Prova unari (Hauria de fer CHSI)
+int c
+c := a % 3  // Prova mòdul (Hauria de fer MODI)

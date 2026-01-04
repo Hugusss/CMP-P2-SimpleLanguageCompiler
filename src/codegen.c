@@ -43,18 +43,17 @@ void cg_print_all(FILE *out) {
     for (int i = 1; i < next_quad; i++) {
         Quad q = code_memory[i];
         fprintf(out, "%d: ", i);
-                
-        /* CASO: Salto Condicional (IF x REL y GOTO z) */
+        
+        /* PRIORIDAD: mirar IF/HALT antes que operaciones genéricas */ 
         if (q.op && strncmp(q.op, "IF", 2) == 0) {
+            /* IF t1 LTI t2 GOTO 10 */
             fprintf(out, "%s %s %s GOTO %s\n", q.op, q.arg1, q.arg2, q.res);
         }
-        /* CASO: Salto Incondicional */
-        else if (q.op && strcmp(q.op, "GOTO") == 0) {
-            fprintf(out, "GOTO %s\n", q.res);
-        }
-        /* CASO: HALT */
         else if (q.op && strcmp(q.op, "HALT") == 0) {
             fprintf(out, "HALT\n");
+        }
+        else if (q.op && strcmp(q.op, "GOTO") == 0) {
+            fprintf(out, "GOTO %s\n", q.res);
         }
         /* CASO: CALL/PARAM */
         else if (q.op && strcmp(q.op, "PARAM") == 0) {
@@ -67,15 +66,18 @@ void cg_print_all(FILE *out) {
         else if (q.op && strcmp(q.op, ":=") == 0) {
             fprintf(out, "%s := %s\n", q.res, q.arg1);
         }
-        /* CASO: Operación binaria ($t1 := a ADDI b) */
+        /* CASO: Operación binaria */
         else if (q.arg1 && q.arg2 && q.res) {
+            /* binaria: res := arg1 op arg2 */
             fprintf(out, "%s := %s %s %s\n", q.res, q.arg1, q.op, q.arg2);
         }
-        /* CASO: Unario / Cast ($t1 := I2F x) */
+        /* CASO: Unario*/
         else if (q.arg1 && q.res) {
+            /* unaria: res := op arg1 (ej: I2F, CHSI) */
             fprintf(out, "%s := %s %s\n", q.res, q.op, q.arg1);
         }
         else {
+            /* Fallback */
             fprintf(out, "%s %s %s %s\n", q.op, q.arg1 ? q.arg1 : "", q.arg2 ? q.arg2 : "", q.res ? q.res : "");
         }
     }
