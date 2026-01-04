@@ -1,0 +1,18 @@
+int a[10]
+int i
+i := 2
+a[i] := 50
+int res
+res := a[2]
+res
+/*
+$tXX := i MULI 4 (Calcula offset escritura)
+
+a[$tXX] := 50 (Asignación desplazada)
+
+$tYY := 2 MULI 4 (Calcula offset lectura literal)
+
+res := a[$tYY] (Lectura desplazada)
+
+PARAM res, CALL PUTI, HALT
+*/

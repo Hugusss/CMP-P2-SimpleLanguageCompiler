@@ -44,40 +44,55 @@ void cg_print_all(FILE *out) {
         Quad q = code_memory[i];
         fprintf(out, "%d: ", i);
         
-        /* PRIORIDAD: mirar IF/HALT antes que operaciones genéricas */ 
+        /* --- PRIORIDAD ALTA: Estructuras especiales --- */
+        /* 1. Saltos y HALT */
         if (q.op && strncmp(q.op, "IF", 2) == 0) {
-            /* IF t1 LTI t2 GOTO 10 */
-            fprintf(out, "%s %s %s GOTO %s\n", q.op, q.arg1, q.arg2, q.res);
-        }
-        else if (q.op && strcmp(q.op, "HALT") == 0) {
-            fprintf(out, "HALT\n");
+            char *rel_op = q.op + 3; /* Saltamos "IF " para coger "LTI" */
+            fprintf(out, "IF %s %s %s GOTO %s\n", q.arg1, rel_op, q.arg2, q.res);
         }
         else if (q.op && strcmp(q.op, "GOTO") == 0) {
             fprintf(out, "GOTO %s\n", q.res);
         }
-        /* CASO: CALL/PARAM */
+        else if (q.op && strcmp(q.op, "HALT") == 0) {
+            fprintf(out, "HALT\n");
+        }
+        
+        /* 2. Arrays (antes que operaciones binarias) */
+        else if (q.op && strcmp(q.op, "arr_set") == 0) {
+            /* a[offset] := valor */
+            fprintf(out, "%s[%s] := %s\n", q.arg1, q.arg2, q.res);
+        }
+        else if (q.op && strcmp(q.op, "arr_get") == 0) {
+            /* destino := a[offset] */
+            fprintf(out, "%s := %s[%s]\n", q.res, q.arg1, q.arg2);
+        }
+
+        /* 3. Llamadas a función */
         else if (q.op && strcmp(q.op, "PARAM") == 0) {
             fprintf(out, "PARAM %s\n", q.arg1);
         }
         else if (q.op && strcmp(q.op, "CALL") == 0) {
             fprintf(out, "CALL %s, %s\n", q.arg1, q.arg2);
         }
-        /* CASO: Asignación simple (x := y) */
+
+        /* 4. Asignación simple */
         else if (q.op && strcmp(q.op, ":=") == 0) {
             fprintf(out, "%s := %s\n", q.res, q.arg1);
         }
-        /* CASO: Operación binaria */
+
+        /* 5. Operaciones Binarias  */
         else if (q.arg1 && q.arg2 && q.res) {
             /* binaria: res := arg1 op arg2 */
             fprintf(out, "%s := %s %s %s\n", q.res, q.arg1, q.op, q.arg2);
         }
-        /* CASO: Unario*/
+
+        /* 6. Operaciones Unarias (I2F, CHSI...) */
         else if (q.arg1 && q.res) {
-            /* unaria: res := op arg1 (ej: I2F, CHSI) */
             fprintf(out, "%s := %s %s\n", q.res, q.op, q.arg1);
         }
+        
+        /* Fallback */
         else {
-            /* Fallback */
             fprintf(out, "%s %s %s %s\n", q.op, q.arg1 ? q.arg1 : "", q.arg2 ? q.arg2 : "", q.res ? q.res : "");
         }
     }

@@ -35,6 +35,8 @@ identif     [a-zA-Z]([a-zA-Z0-9_])*
 ";"         { return SEMICOLON; } /* solo para dentro de structs */
 ","         { return COMMA; }
 "."         { return DOT; }
+"["         { return LBRACKET; }
+"]"         { return RBRACKET; }
 
     /* --- PALABRAS RESERVADAS --- */
 "int"       { return KW_INT; }
