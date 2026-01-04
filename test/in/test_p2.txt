@@ -1,0 +1,19 @@
+// Prueba Factorial
+float x
+x := 5.0
+int i
+i := 3
+float y
+y := i + i * 3 - x
+
+int n
+n := 10
+int fact
+fact := 1
+i := 2
+
+repeat n - 1 do
+    fact := fact * i
+    i := i + 1
+done
+fact
