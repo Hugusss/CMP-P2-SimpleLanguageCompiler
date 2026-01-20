@@ -109,6 +109,63 @@ C3A_Info gen_unary_op(C3A_Info a) {
     cg_emit(opcode, a.addr, NULL, res.addr);
     return res;
 }
+
+/* --- NUEVO: IMPLEMENTACIÓN REAL DE LA POTENCIA (LOOP) --- */
+C3A_Info gen_power(C3A_Info base, C3A_Info exp) {
+    C3A_Info res;
+    res.type = T_ERROR;
+    res.addr = NULL;
+    res.ctr_var = NULL;
+
+    /* 1. Chequeo de Tipos */
+    if (base.type == T_ERROR || exp.type == T_ERROR) return res;
+    if (exp.type != T_INT) {
+        fprintf(stderr, "Error semántico: El exponente debe ser entero.\n");
+        return res;
+    }
+
+    /* 2. Inicialización: res := 1 (o 1.0) */
+    res.type = base.type; 
+    res.addr = cg_new_temp();
+    
+    if (base.type == T_INT) {
+        cg_emit(":=", "1", NULL, res.addr);
+    } else {
+        cg_emit(":=", "1.0", NULL, res.addr);
+    }
+
+    /* 3. Contador: cnt := 0 */
+    char *cnt = cg_new_temp();
+    cg_emit(":=", "0", NULL, cnt);
+
+    /* 4. Etiqueta Inicio Bucle */
+    int start_label_idx = cg_next_quad();
+    char start_label[16];
+    sprintf(start_label, "%d", start_label_idx);
+
+    /* 5. Condición: IF cnt GE exp GOTO Fin */
+    /* Nota: Usamos lógica inversa para saltar al final si terminamos */
+    /* Pero como no tenemos "GOTO End" fácil sin saber la línea, usamos la estructura REPEAT lógica: */
+    /* IF cnt LTI exp GOTO Body... No, mejor estructura simple: */
+    
+    /* Vamos a hacerlo estilo: multiplicar 'exp' veces. */
+    /* Check inicial: Si exp <= 0 saltamos al final (no implementado salto forward fácil sin backpatching en este diseño simple) */
+    /* Asumiremos exp >= 1 como en el repeat del enunciado */
+
+    /* CUERPO DEL BUCLE DE POTENCIA */
+    /* res := res * base */
+    char *op = (base.type == T_INT) ? "MULI" : "MULF";
+    cg_emit(op, res.addr, base.addr, res.addr);
+
+    /* cnt := cnt + 1 */
+    cg_emit("ADDI", cnt, "1", cnt);
+
+    /* 6. Salto Atrás: IF cnt LTI exp GOTO Inicio */
+    cg_emit("IF LTI", cnt, exp.addr, start_label);
+
+    return res;
+}
+
 %}
 
 %union {
@@ -132,7 +189,7 @@ C3A_Info gen_unary_op(C3A_Info a) {
 %token <ident> ID 
 
 %type <info> expressio term potencia factor repeat_header
-%type <info> variable /* variable ahora devuelve info completa (addr + offset) */
+%type <info> variable
 
 %start programa
 
@@ -165,7 +222,7 @@ sentencia : declaracion EOL
 declaracion : KW_INT ID   { install_var($2.lexema, T_INT, 0, 0); }
             | KW_FLOAT ID { install_var($2.lexema, T_FLOAT, 0, 0); }
             
-            /* ARRAY DECLARATION: int a[25]*/
+            /* ARRAY DECLARATION: int a[25] */
             | KW_INT ID LBRACKET LIT_INT RBRACKET {
                 install_var($2.lexema, T_INT, 1, atoi($4));
             }
@@ -173,7 +230,7 @@ declaracion : KW_INT ID   { install_var($2.lexema, T_INT, 0, 0); }
                 install_var($2.lexema, T_FLOAT, 1, atoi($4));
             }
 
-            /* Inicializaciones (Syntactic sugar opcional) */
+            /* Inicializaciones */
             | KW_INT ID ASSIGN expressio {
                 install_var($2.lexema, T_INT, 0, 0);
                 cg_emit(":=", $4.addr, NULL, $2.lexema);
@@ -191,14 +248,11 @@ declaracion : KW_INT ID   { install_var($2.lexema, T_INT, 0, 0); }
 
 /* --- ASIGNACIONES --- */
 asignacion : variable ASSIGN expressio {
-                /* variable trae: addr="nombre", ctr_var="offset" (si es array) o NULL */
-                
                 C3AType varType = $1.type;
                 if (varType == T_ERROR) {
                     fprintf(stderr, "Error: Variable '%s' desconocida o inválida.\n", $1.addr);
                 } else {
                     char *src = $3.addr;
-                    /* Conversión implícita */
                     if (varType == T_FLOAT && $3.type == T_INT) {
                         src = cg_new_temp();
                         cg_emit("I2F", $3.addr, NULL, src);
@@ -208,8 +262,7 @@ asignacion : variable ASSIGN expressio {
                         /* Asignación Simple: x := y */
                         cg_emit(":=", src, NULL, $1.addr);
                     } else {
-                        /* Asignación Desplazada: a[offset] := y*/
-                        /* se usa opcode interno "arr_set" que codegen traducirá */
+                        /* Asignación Array: a[offset] := y */
                         cg_emit("arr_set", $1.addr, $1.ctr_var, src);
                     }
                 }
@@ -246,7 +299,7 @@ repeat_header : REPEAT expressio DO {
 expressio : term
           | expressio PLUS term  { $$ = gen_binary_op("ADD", $1, $3); }
           | expressio MINUS term { $$ = gen_binary_op("SUB", $1, $3); }
-          | MINUS term           { $$ = gen_unary_op($2); } /* Unario */
+          | MINUS term           { $$ = gen_unary_op($2); }
           | PLUS term            { $$ = $2; }
           ;
 
@@ -260,8 +313,8 @@ term : potencia
 /* Nivel 3: Potencia */
 potencia : factor
          | factor POW potencia { 
-             fprintf(stderr, "Warning: Power (**) operator used but not fully implemented.\n");
-             $$ = $1; 
+             /* Implementación de la potencia mediante bucle */
+             $$ = gen_power($1, $3); 
          }
          ;
 
@@ -277,30 +330,28 @@ factor : LIT_INT {
             $$.ctr_var = NULL;
          }
        | variable {
-            /* variable ya ha calculado el offset si es array */
             if ($1.ctr_var == NULL) {
-                /* Acceso simple: x */
                 $$.addr = $1.addr;
                 $$.type = $1.type;
                 $$.ctr_var = NULL;
             } else {
-                /* Acceso Array: a[offset] -> Consulta desplazada */
+                /* Acceso Array */
                 char *temp = cg_new_temp();
                 cg_emit("arr_get", $1.addr, $1.ctr_var, temp);
                 
                 $$.addr = temp;
                 $$.type = $1.type;
-                $$.ctr_var = NULL; /* El resultado ya es un valor escalar en temp */
+                $$.ctr_var = NULL;
             }
          }
        | LPAREN expressio RPAREN { $$ = $2; }
        ;
 
-/* Regla variable: Maneja identificadores simples y arrays */
+/* Regla variable: Maneja identificadores simples y arrays, con el offset 25 */
 variable : ID {
              $$.addr = strdup($1.lexema);
              $$.type = get_var_type($1.lexema);
-             $$.ctr_var = NULL; /* NULL indica escalar */
+             $$.ctr_var = NULL;
           }
           | ID LBRACKET expressio RBRACKET {
              /* Consulta de Array: a[i] */
@@ -315,13 +366,18 @@ variable : ID {
                  fprintf(stderr, "Error: Índice de array debe ser entero.\n");
              }
              
-             /* 3. Calcular Offset: index * 4 bytes (int/float) */
-             char *offset = cg_new_temp();
-             cg_emit("MULI", $3.addr, "4", offset);
+             /* 3. Calcular Offset relativo: index * 4 */
+             char *offset_rel = cg_new_temp();
+             cg_emit("MULI", $3.addr, "4", offset_rel);
+             
+             /* 4. Sumar la BASE 25 al offset */
+             char *offset_final = cg_new_temp();
+             cg_emit("ADDI", offset_rel, "25", offset_final);
              
              $$.addr = strdup($1.lexema);
              $$.type = get_var_type($1.lexema);
-             $$.ctr_var = offset; /* se guarda EL OFFSET EN ESTE CAMPO */
+             /* Guardamos el offset FINAL (con base sumada) para arr_get/arr_set */
+             $$.ctr_var = offset_final; 
           }
           ;
 
