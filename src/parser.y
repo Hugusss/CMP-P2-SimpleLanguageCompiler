@@ -110,7 +110,7 @@ C3A_Info gen_unary_op(C3A_Info a) {
     return res;
 }
 
-/* --- NUEVO: IMPLEMENTACIÓN REAL DE LA POTENCIA (LOOP) --- */
+/* --- IMPLEMENTACIÓN POTENCIA (WHILE LOOP) --- */
 C3A_Info gen_power(C3A_Info base, C3A_Info exp) {
     C3A_Info res;
     res.type = T_ERROR;
@@ -138,30 +138,37 @@ C3A_Info gen_power(C3A_Info base, C3A_Info exp) {
     char *cnt = cg_new_temp();
     cg_emit(":=", "0", NULL, cnt);
 
-    /* 4. Etiqueta Inicio Bucle */
-    int start_label_idx = cg_next_quad();
+    /* 4. Etiquetas */
+    int start_label_idx = cg_next_quad(); /* Inicio del bucle */
     char start_label[16];
     sprintf(start_label, "%d", start_label_idx);
 
-    /* 5. Condición: IF cnt GE exp GOTO Fin */
-    /* Nota: Usamos lógica inversa para saltar al final si terminamos */
-    /* Pero como no tenemos "GOTO End" fácil sin saber la línea, usamos la estructura REPEAT lógica: */
-    /* IF cnt LTI exp GOTO Body... No, mejor estructura simple: */
+    int end_label_idx = start_label_idx + 4;
+    char end_label[16];
+    sprintf(end_label, "%d", end_label_idx);
     
-    /* Vamos a hacerlo estilo: multiplicar 'exp' veces. */
-    /* Check inicial: Si exp <= 0 saltamos al final (no implementado salto forward fácil sin backpatching en este diseño simple) */
-    /* Asumiremos exp >= 1 como en el repeat del enunciado */
-
-    /* CUERPO DEL BUCLE DE POTENCIA */
-    /* res := res * base */
+    /* 1. Condición de Salida: Si cnt >= exp, ve al final */
+    /* C3A suele tener GE (Greater Equal) */
+    /* IF cnt GEI exp GOTO end_label */
+    
+    char *rel_op = (exp.type == T_INT) ? "GEI" : "GEF"; /* Asumimos exp entero, así que GEI */
+    /* cg_emit recibe "IF LTI", aquí montamos "IF GEI" */
+    char if_op[16];
+    sprintf(if_op, "IF %s", rel_op);
+    
+    cg_emit(if_op, cnt, exp.addr, end_label); /* start */
+    
+    /* 2. Cuerpo: Multiplicación */
     char *op = (base.type == T_INT) ? "MULI" : "MULF";
-    cg_emit(op, res.addr, base.addr, res.addr);
+    cg_emit(op, res.addr, base.addr, res.addr); /* start+1 */
 
-    /* cnt := cnt + 1 */
-    cg_emit("ADDI", cnt, "1", cnt);
+    /* 3. Incremento */
+    cg_emit("ADDI", cnt, "1", cnt); /* start+2 */
 
-    /* 6. Salto Atrás: IF cnt LTI exp GOTO Inicio */
-    cg_emit("IF LTI", cnt, exp.addr, start_label);
+    /* 4. Salto al inicio */
+    cg_emit("GOTO", NULL, NULL, start_label); /* start+3 */
+
+    /* La siguiente instrucción generada será start+4 (el destino) */
 
     return res;
 }

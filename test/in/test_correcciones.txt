@@ -1,0 +1,46 @@
+// --- TEST DE CORRECCIONES (Base 25 y Potencia) ---
+
+// 1. ARRAYS CON OFFSET BASE 25
+// ----------------------------
+// El calculo debe ser: (indice * 4) + 25.
+
+int a[10]
+int i
+i := 3
+
+// Asignacion desplazada
+// Deberia verse: MULI 4 y luego ADDI 25
+a[i] := 99
+
+// Consulta desplazada
+int recuperado
+recuperado := a[i]
+
+
+// 2. POTENCIA (IMPLEMENTACION CON BUCLE)
+// --------------------------------------
+// 2 elevado a 3. Debe dar 8.
+// Se debe ver el bucle generado (etiqueta y GOTO atras).
+
+int base
+base := 2
+int exp
+exp := 3
+int resultado
+resultado := base ** exp
+
+
+// 3. POTENCIA CON EXPONENTE 0
+// ---------------------------
+// 5 elevado a 0.
+// Como se usaa un bucle tipo REPEAT (do-while), entrara 1 vez.
+
+int cero
+cero := 0
+int resZero
+resZero := 5 ** cero
+
+// Salida de resultados
+recuperado
+resultado
+resZero
